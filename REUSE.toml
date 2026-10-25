@@ -1,0 +1,13 @@
+version = 1
+
+[[annotations]]
+path = "tools/arms/*.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 scarf"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+[[annotations]]
+path = ["custom/**", "README.md", ".gitattributes"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "the original author(s) and rights holders"
+SPDX-License-Identifier = "LicenseRef-Original-Author"
