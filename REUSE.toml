@@ -1,7 +1,7 @@
 version = 1
 
 [[annotations]]
-path = "tools/arms/*.json"
+path = ["tools/arms/*.json", "justfile", "manifest.sha256", ".gitignore"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 scarf"
 SPDX-License-Identifier = "AGPL-3.0-only"
