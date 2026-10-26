@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // usage: compile.ts <qcDir> <qc> <outDir>; runs studiomdl under wine, captures outputs before its exit crash
 const [dir, qc, out, sub = "PM"] = Deno.args, S = Deno.cwd(), SDK = `${Deno.env.get("SDK")}/bin/studiomdl.exe`
+const T0 = Date.now()
 const watch = new Deno.Command("inotifywait", { args: ["-m", "-q", "-e", "close_write", "--format", "%f", `${S}/cg/models/${sub}`], stdout: "piped" }).spawn()
 // parallel runs share the output dir: copy only this QC's model files
 const stem = (Deno.readTextFileSync(`${dir}/${qc}`).match(/\$modelname\s+"([^"]+)"/)?.[1] ?? "").split(/[\\/]/).pop()!.replace(/\.mdl$/i, "").toLowerCase() + "."
@@ -19,4 +20,6 @@ await Deno.mkdir(out, { recursive: true })
 const p = new Deno.Command("xvfb-run", { args: ["-a", "wine", SDK, "-nop4", "-game", `Z:${S}/cg`, `Z:${dir}/${qc}`], env: { WINEPREFIX: Deno.env.get("WINEPREFIX")!, WINEDEBUG: "-all" }, stdout: "piped", stderr: "piped" }).output()
 await Deno.writeFile(`${out}/studiomdl.log`, (await p).stdout)
 await new Promise((r) => setTimeout(r, 6000)); watch.kill()
-console.log("done", [...Deno.readDirSync(out)].map((e) => e.name).join(" "))
+const fresh = [...Deno.readDirSync(out)].filter((e) => Deno.statSync(`${out}/${e.name}`).mtime!.getTime() >= T0 - 1000).map((e) => e.name)
+if (!fresh.some((n) => n.endsWith(".mdl"))) { console.error("studiomdl produced no new mdl"); Deno.exit(1) }
+console.log("done", fresh.join(" "))
