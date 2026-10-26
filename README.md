@@ -4,6 +4,12 @@ Port of the Garry's Mod addon "[Blue Archive] SRT- Niko - PM&NPC" to Black Mesa.
 
 Install: copy `custom/niko` to `Black Mesa/bms/custom/niko`. `models/Player` and `models/player` hold the same files because the Linux filesystem is case-sensitive; on Windows or macOS keep one of them.
 
+## Build
+
+`just build` rebuilds the mod from your own copies of the addon and Black Mesa into `work/out` and checks every file against `manifest.sha256`. Textures, materials and NPC/arms models are byte-identical to the installed mod. studiomdl is not fully deterministic, so model files are compared with their runtime pointers and compile checksum masked, and a mismatch there is only a warning; 12 of the 190 files (viewmodel `.vvd`/`.vtx`/`.mdl`) differ from my installed copy in header bytes. `just install` copies the result into Black Mesa.
+
+Needs [Deno](https://deno.com), [just](https://just.systems), wine with xvfb, inotify-tools, [Crowbar command line](https://github.com/UltraTechX/Crowbar-Command-Line) and Source SDK Base 2013 Multiplayer (for `studiomdl.exe`). Subscribe to the Workshop item first. Paths come from environment variables, see the top of `tools/build.ts` (`STEAM`, `BMS`, `GMA`, `SDK`, `CROWBAR`, `WINEPREFIX`, `WORK`, `OUT`).
+
 ## Credits
 
 - Model, textures and rigging: the original author, published on [aplaybox](https://www.aplaybox.com/details/model/bgzWCBDl4zFG).
