@@ -111,11 +111,12 @@ const stages: Record<string, () => Promise<void>> = {
     const want = new Map(Deno.readTextFileSync(`${REPO}/manifest.sha256`).trim().split("\n").map((l) => [l.slice(66), l.slice(0, 64)]))
     const got = await hashTree(cfg.out)
     const model = (f: string) => /\.(mdl|vvd|vtx)$/.test(f)
-    const diff = [...want].filter(([f, h]) => got.get(f) !== h).map(([f]) => f).concat([...got.keys()].filter((f) => !want.has(f)))
-    const bad = diff.filter((f) => !model(f))
-    for (const f of diff.filter(model)) console.warn(`warning: ${f} differs from manifest.sha256 (studiomdl output varies between runs)`)
-    if (bad.length) throw new Error(`${bad.length} files differ from manifest.sha256:\n${bad.join("\n")}`)
-    console.log(`${got.size - diff.length} of ${got.size} files match manifest.sha256`)
+    const missing = [...want.keys()].filter((f) => !got.has(f)), extra = [...got.keys()].filter((f) => !want.has(f))
+    const differ = [...want].filter(([f, h]) => got.has(f) && got.get(f) !== h).map(([f]) => f)
+    const bad = missing.concat(extra, differ.filter((f) => !model(f)))
+    for (const f of differ.filter(model)) console.warn(`warning: ${f} differs from manifest.sha256 (studiomdl output varies between runs)`)
+    if (bad.length) throw new Error(`${bad.length} files missing, unexpected or different from manifest.sha256:\n${bad.join("\n")}`)
+    console.log(`${got.size - differ.length} of ${got.size} files match manifest.sha256`)
   },
 }
 

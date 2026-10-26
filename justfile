@@ -5,6 +5,6 @@
 build:
     deno run -A tools/build.ts
 
-# copy the build into Black Mesa
+# copy the build into Black Mesa (set STEAM or BMS, and OUT if the build used it, to match the build)
 install: build
-    cp -a work/out/. "${BMS:-$HOME/.local/share/Steam/steamapps/common/Black Mesa/bms}/custom/niko/"
+    cp -a "${OUT:-work/out}/." "${BMS:-${STEAM:-$HOME/.local/share/Steam}/steamapps/common/Black Mesa/bms}/custom/niko/"
