@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 scarf
 // SPDX-License-Identifier: AGPL-3.0-only
 // usage: mkweapon.ts <weapon> ; builds a patched QC dir bmsp/w/<weapon>/build with nike arms replacing the arms bodygroup
-const w = Deno.args[0], base = `bmsp/w/${w}/dec`, out = `bmsp/w/${w}/build`
+const T = new URL(".", import.meta.url).pathname, w = Deno.args[0], base = `bmsp/w/${w}/dec`, out = `bmsp/w/${w}/build`
 await Deno.mkdir(out, { recursive: true })
 const qcName = [...Deno.readDirSync(base)].find((e) => e.name.endsWith(".qc"))!.name
 let q = Deno.readTextFileSync(`${base}/${qcName}`)
-const rig = [...Deno.readDirSync(base)].map((e) => e.name).find((n) => /hev_standardrig(_[lr])?\.smd$/.test(n))!
-const r = new Deno.Command("deno", { args: ["run", "-A", "tools/retarget.ts", "arms", `${base}/${rig}`, Deno.readTextFileSync(`${base}/${rig}`).includes("\"Bip001 ") ? "arms/map.json" : "arms/mapw.json", `${out}/nk`, "arms/na/dec/Arms.smd"] }).outputSync()
+const rig = [...Deno.readDirSync(base)].map((e) => e.name).find((n) => /(hev_standardrig(_[lr])?|^v_hands_ref)\.smd$/.test(n))!
+const r = new Deno.Command("deno", { args: ["run", "-A", `${T}retarget.ts`, "arms", `${base}/${rig}`, Deno.readTextFileSync(`${base}/${rig}`).includes("\"Bip001 ") ? "arms/map.json" : "arms/mapw.json", `${out}/nk`, "arms/na/dec/Arms.smd"] }).outputSync()
 console.log(new TextDecoder().decode(r.stdout).trim())
 await Deno.copyFile(`${out}/nk/Arms.smd`, `${out}/nike_arms_w.smd`)
 const L = Deno.readTextFileSync(`${out}/nike_arms_w.smd`).split(/\r?\n/), t = L.indexOf("triangles"), keep = L.slice(0, t + 1); let i = t + 1
@@ -28,8 +28,7 @@ for (const e of Deno.readDirSync(base)) {
   if (e.name === qcName || e.name.match(/standardrig(_[lr])?\.smd$/)) continue
   const src = Deno.realPathSync(`${base}/${e.name}`), dst = `${out}/${e.name}`
   if (!Deno.statSync(src).isDirectory) { try { Deno.symlinkSync(src, dst) } catch { /* exists */ } continue }
-  try { if (Deno.lstatSync(dst).isSymlink) Deno.renameSync(dst, `removed/${w}_${e.name}_link_${Date.now()}`) } catch { /* absent */ }
   await Deno.mkdir(dst, { recursive: true })
-  for (const a of Deno.readDirSync(src)) if (a.name.endsWith(".smd")) new Deno.Command("deno", { args: ["run", "-A", "tools/twistbake.ts", `${base}/${rig}`, `${src}/${a.name}`, `${dst}/${a.name}`] }).outputSync().success || console.log("twistbake failed", a.name)
+  for (const a of Deno.readDirSync(src)) if (a.name.endsWith(".smd")) new Deno.Command("deno", { args: ["run", "-A", `${T}twistbake.ts`, `${base}/${rig}`, `${src}/${a.name}`, `${dst}/${a.name}`] }).outputSync().success || console.log("twistbake failed", a.name)
 }
 Deno.writeTextFileSync(`${out}/patched.qc`, q)
