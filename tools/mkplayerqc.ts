@@ -40,6 +40,7 @@ $skipboneinbbox
 
 
 ${joints}
+$bonemerge "ValveBiped.Bip01_R_Hand"
 $ikchain "rhand" "ValveBiped.Bip01_R_Hand" knee 0.707 0.707 0
 $ikchain "lhand" "ValveBiped.Bip01_L_Hand" knee 0.707 0.707 0
 $ikchain "rfoot" "ValveBiped.Bip01_R_Foot" knee 0.707 -0.707 0
