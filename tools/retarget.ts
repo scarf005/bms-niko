@@ -127,10 +127,18 @@ for (const f of inputs) {
       const knots: [number, number][] = t !== undefined ? [[f, 0], [t, 1]] : chain
       if (knots.length) twistOf.set(sb(`${side}_Forearm`)!, { knots, p0: sW[sb(`${side}_Forearm`)!].p, ...fo })
     }
+    // the hand and fingers take the target bone frames; the arm bones above the hand swing onto the target direction from the bone
+    // below, so the mesh carries no roll at the wrist or elbow (the rigs' arm bone frames do not share the hand's roll convention)
+    const below: Record<string, string> = { Clavicle: "UpperArm", UpperArm: "Forearm", Forearm: "Hand" }
+    const rotOf = (s: number): M => {
+      const side = /_L_/.test(P.skel[s].name) ? "L" : "R", m = P.skel[s].name.match(/_(Clavicle|UpperArm|Forearm)$/), c = m ? sb(`${side}_${below[m[1]]}`) : undefined
+      if (c === undefined || !tIdx.has(map[P.skel[c].name])) return mul(mul(tW[tIdx.get(map[P.skel[s].name])!].R, sideQ[side] ?? I3), tr(sW[s].R))
+      const Rc = rotOf(c), dt = sub(tW[tIdx.get(map[P.skel[c].name])!].p, tW[tIdx.get(map[P.skel[s].name])!].p)
+      return Math.hypot(...dt) < 1e-3 ? Rc : mul(swing(app(Rc, sub(sW[c].p, sW[s].p)), dt), Rc)
+    }
     Mt = frame.map((s, i) => {
       if (s < 0) return { R: I3, t: [0, 0, 0] as V }
-      const side = /_L_/.test(P.skel[s].name) ? "L" : "R", Qs = sideQ[side] ?? I3
-      const R = mul(mul(tW[outIdx[i]].R, Qs), tr(sW[s].R)), A = mul(R, armScale(side, P.skel[s].name))
+      const side = /_L_/.test(P.skel[s].name) ? "L" : "R", R = rotOf(s), A = mul(R, armScale(side, P.skel[s].name))
       return { R, A, t: sub(tW[outIdx[i]].p, app(A, sW[s].p)) }
     })
   } else {
