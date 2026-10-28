@@ -78,7 +78,7 @@ await Deno.mkdir(outDir, { recursive: true })
 for (const f of inputs) {
   const P = parse(await Deno.readTextFile(f)), sW = worlds(P.skel), sIdx = new Map(P.skel.map((b, i) => [b.name, i]))
   let outBones: Bone[], outIdx: number[], Mt: { R: M; t: V; A?: M }[]
-  const twistOf = new Map<number, { t: number; p0: V; u: V; ls: number }>()
+  const twistOf = new Map<number, { knots: [number, number][]; p0: V; u: V; ls: number }>()
   if (mode === "arms") {
     outBones = tgt
     const prim = new Map<string, number>(); P.skel.forEach((b, i) => { const t = map[b.name]; if (t !== undefined && tIdx.has(t)) prim.set(t, i) })
@@ -116,10 +116,16 @@ for (const f of inputs) {
       const a = sg ? sg.lt / sg.ls / k : 1, u = sg ? sg.u : [1, 0, 0] as V
       return [0, 1, 2].map((r) => [0, 1, 2].map((c) => k * ((r === c ? 1 : 0) + (a - 1) * u[r] * u[c]))) as M
     }
-    // the forearm twist bone (animated by twistbake.ts) takes the forearm weights in a ramp from the elbow (0) to the wrist (1)
+    // forearm weights spread by position from the elbow (0) to the wrist (1) over bones that take part of the wrist roll:
+    // the forearm and its twist bone animated by twistbake.ts, or the rig's own animated ForeTwist chain at its joints
     for (const side of ["L", "R"]) {
       const fo = seg(side, "Forearm", "Hand"), t = tIdx.get(`SCI_Hand_Forearm_${side}`)
-      if (fo && t !== undefined) twistOf.set(sb(`${side}_Forearm`)!, { t, p0: sW[sb(`${side}_Forearm`)!].p, ...fo })
+      const f = tIdx.get(map[`ValveBiped.Bip01_${side}_Forearm`]), h = tIdx.get(map[`ValveBiped.Bip01_${side}_Hand`])
+      if (!fo || f === undefined || h === undefined) continue
+      const d = sub(tW[h].p, tW[f].p), at = (i: number) => { const e = sub(tW[i].p, tW[f].p); return (e[0] * d[0] + e[1] * d[1] + e[2] * d[2]) / (fo.lt * fo.lt) }
+      const chain = tgt.flatMap((b, i) => new RegExp(` ${side} ForeTwist\\d*$`).test(b.name) ? [[i, at(i)] as [number, number]] : []).sort((a, b) => a[1] - b[1])
+      const knots: [number, number][] = t !== undefined ? [[f, 0], [t, 1]] : chain
+      if (knots.length) twistOf.set(sb(`${side}_Forearm`)!, { knots, p0: sW[sb(`${side}_Forearm`)!].p, ...fo })
     }
     Mt = frame.map((s, i) => {
       if (s < 0) return { R: I3, t: [0, 0, 0] as V }
@@ -169,10 +175,12 @@ for (const f of inputs) {
       const acc = new Map<number, number>(); let pos: V = [0, 0, 0], nrm: V = [0, 0, 0], tw = 0
       for (const [b, w] of v.links.length ? v.links : [[v.b, 1] as [number, number]]) {
         const si = idOf.get(b)!, o = outIdx[si]; if (o < 0) { unmapped++; continue }
-        const tb = twistOf.get(si), d = tb ? sub(v.p, tb.p0) : undefined
-        const r = tb ? Math.max(0, Math.min(1, (d![0] * tb.u[0] + d![1] * tb.u[1] + d![2] * tb.u[2]) / tb.ls)) : 0
-        if (r < 1) acc.set(o, (acc.get(o) ?? 0) + w * (1 - r))
-        if (r > 0) acc.set(tb!.t, (acc.get(tb!.t) ?? 0) + w * r)
+        const tb = twistOf.get(si), put = (b: number, x: number) => x > 0 && acc.set(b, (acc.get(b) ?? 0) + x)
+        if (tb) {
+          const d = sub(v.p, tb.p0), r = (d[0] * tb.u[0] + d[1] * tb.u[1] + d[2] * tb.u[2]) / tb.ls, k = tb.knots, j = k.findIndex((x) => x[1] > r)
+          if (j <= 0) put(k.at(j)![0], w)
+          else { const s = (r - k[j - 1][1]) / (k[j][1] - k[j - 1][1]); put(k[j - 1][0], w * (1 - s)); put(k[j][0], w * s) }
+        } else acc.set(o, (acc.get(o) ?? 0) + w)
         tw += w
         const m = Mt[si], q = add(app(m.A ?? m.R, v.p), m.t), n = app(m.R, v.n)
         pos = add(pos, [q[0] * w, q[1] * w, q[2] * w]); nrm = add(nrm, [n[0] * w, n[1] * w, n[2] * w])
