@@ -127,14 +127,21 @@ for (const f of inputs) {
       const knots: [number, number][] = t !== undefined ? [[f, 0], [t, 1]] : chain
       if (knots.length) twistOf.set(sb(`${side}_Forearm`)!, { knots, p0: sW[sb(`${side}_Forearm`)!].p, ...fo })
     }
-    // the hand and fingers take the target bone frames; the arm bones above the hand swing onto the target direction from the bone
-    // below, so the mesh carries no roll at the wrist or elbow (the rigs' arm bone frames do not share the hand's roll convention)
-    const below: Record<string, string> = { Clavicle: "UpperArm", UpperArm: "Forearm", Forearm: "Hand" }
+    // the arm bones do not share the hand's roll convention: they take the roll (in the same steps) that leaves the least rotation
+    // between the forearm and the hand, so the mesh carries no twist at the wrist and the elbow keeps its bend direction
+    const rollQ = (k: number): M => { const c = Math.round(Math.cos(k * Math.PI / 2)), sn = Math.round(Math.sin(k * Math.PI / 2)); return [[1, 0, 0], [0, c, -sn], [0, sn, c]] }
+    const frameR = (s: number, Q: M): M => mul(mul(tW[tIdx.get(map[P.skel[s].name])!].R, Q), tr(sW[s].R))
+    const armQ: Record<string, M> = {}
+    for (const side of ["L", "R"]) {
+      const f = sb(`${side}_Forearm`), h = sb(`${side}_Hand`)
+      if (f === undefined || h === undefined || !tIdx.has(map[P.skel[f].name]) || !tIdx.has(map[P.skel[h].name])) continue
+      const Rh = frameR(h, sideQ[side] ?? I3), off = (Q: M) => { const m = mul(tr(frameR(f, Q)), Rh); return m[0][0] + m[1][1] + m[2][2] }
+      armQ[side] = [0, 1, 2, 3].map(rollQ).reduce((a, b) => off(b) > off(a) ? b : a)
+      console.log("arm roll", side, JSON.stringify(armQ[side]), "wrist offset", (Math.acos(Math.max(-1, Math.min(1, (off(armQ[side]) - 1) / 2))) * 180 / Math.PI).toFixed(1))
+    }
     const rotOf = (s: number): M => {
-      const side = /_L_/.test(P.skel[s].name) ? "L" : "R", m = P.skel[s].name.match(/_(Clavicle|UpperArm|Forearm)$/), c = m ? sb(`${side}_${below[m[1]]}`) : undefined
-      if (c === undefined || !tIdx.has(map[P.skel[c].name])) return mul(mul(tW[tIdx.get(map[P.skel[s].name])!].R, sideQ[side] ?? I3), tr(sW[s].R))
-      const Rc = rotOf(c), dt = sub(tW[tIdx.get(map[P.skel[c].name])!].p, tW[tIdx.get(map[P.skel[s].name])!].p)
-      return Math.hypot(...dt) < 1e-3 ? Rc : mul(swing(app(Rc, sub(sW[c].p, sW[s].p)), dt), Rc)
+      const side = /_L_/.test(P.skel[s].name) ? "L" : "R"
+      return frameR(s, (/_(Clavicle|UpperArm|Forearm)$/.test(P.skel[s].name) ? armQ[side] : undefined) ?? sideQ[side] ?? I3)
     }
     Mt = frame.map((s, i) => {
       if (s < 0) return { R: I3, t: [0, 0, 0] as V }
