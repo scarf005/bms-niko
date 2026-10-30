@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // usage: retarget.ts <mode> <tgt.qc> <mapfile.json|-> <outDir> <in.smd...>
 // mode "arms": output skeleton = target definebone skeleton; source bones map to target bones by name table
+// mode "merge": like "arms" with the bones matched by name, case-insensitively and ignoring a model prefix, and moved rigidly, as
+// Source's bonemerge places them
 // mode "pose": output skeleton = source skeleton and lengths; same-named bones take the target rest rotation, arm chain swings onto the target direction
 type V = [number, number, number]
 type M = [V, V, V]
@@ -79,11 +81,20 @@ for (const f of inputs) {
   const P = parse(await Deno.readTextFile(f)), sW = worlds(P.skel), sIdx = new Map(P.skel.map((b, i) => [b.name, i]))
   let outBones: Bone[], outIdx: number[], Mt: { R: M; t: V; A?: M }[]
   const twistOf = new Map<number, { knots: [number, number][]; p0: V; u: V; ls: number }>()
-  if (mode === "arms") {
+  const merge = mode === "merge"
+  if (merge) {
+    // a name with no exact match falls back to the part after the model prefix (Crossbow_model.Bip01_L_Hand), when unique
+    const low = new Map(tgt.map((b) => [b.name.toLowerCase(), b.name])), base = (n: string) => n.toLowerCase().replace(/^.*\./, "")
+    const bare = new Map<string, string | null>(); for (const b of tgt) bare.set(base(b.name), bare.has(base(b.name)) ? null : b.name)
+    for (const b of P.skel) { const t = low.get(b.name.toLowerCase()) ?? bare.get(base(b.name)); if (t) map[b.name] = t }
+  }
+  if (mode === "arms" || merge) {
     outBones = tgt
     const prim = new Map<string, number>(); P.skel.forEach((b, i) => { const t = map[b.name]; if (t !== undefined && tIdx.has(t)) prim.set(t, i) })
     const frame = P.skel.map((_, i) => { let c = i; while (c >= 0 && !(map[P.skel[c].name] !== undefined && tIdx.has(map[P.skel[c].name]))) c = sIdx.get(P.skel[c].parent) ?? -1; return c < 0 ? -1 : prim.get(map[P.skel[c].name])! })
-    outIdx = frame.map((s) => s < 0 ? -1 : tIdx.get(map[P.skel[s].name])!)
+    // merge: a bone of one arm never falls back to a bone off that arm (the other arm of a one-handed rig whose spine is in the target)
+    const sideOf = (n: string) => n.match(/_([LR])_/)?.[1]
+    outIdx = frame.map((s, i) => s < 0 || (merge && sideOf(P.skel[i].name) && sideOf(P.skel[i].name) !== sideOf(P.skel[s].name)) ? -1 : tIdx.get(map[P.skel[s].name])!)
     // roll about the limb axis: pick the one that best aligns finger spread of the source hand with the target hand
     const sideQ: Record<string, M> = {}
     for (const side of ["L", "R"]) {
@@ -125,7 +136,7 @@ for (const f of inputs) {
       const d = sub(tW[h].p, tW[f].p), at = (i: number) => { const e = sub(tW[i].p, tW[f].p); return (e[0] * d[0] + e[1] * d[1] + e[2] * d[2]) / (fo.lt * fo.lt) }
       const chain = tgt.flatMap((b, i) => new RegExp(` ${side} ForeTwist\\d*$`).test(b.name) ? [[i, at(i)] as [number, number]] : []).sort((a, b) => a[1] - b[1])
       const knots: [number, number][] = t !== undefined ? [[f, 0], [t, 1]] : chain
-      if (knots.length) twistOf.set(sb(`${side}_Forearm`)!, { knots, p0: sW[sb(`${side}_Forearm`)!].p, ...fo })
+      if (knots.length && !merge) twistOf.set(sb(`${side}_Forearm`)!, { knots, p0: sW[sb(`${side}_Forearm`)!].p, ...fo })
     }
     // the arm bones do not share the hand's roll convention: they take the roll (in the same steps) that leaves the least rotation
     // between the forearm and the hand, so the mesh carries no twist at the wrist and the elbow keeps its bend direction
@@ -144,7 +155,8 @@ for (const f of inputs) {
       return frameR(s, (/_(Clavicle|UpperArm|Forearm)$/.test(P.skel[s].name) ? armQ[side] : undefined) ?? sideQ[side] ?? I3)
     }
     Mt = frame.map((s, i) => {
-      if (s < 0) return { R: I3, t: [0, 0, 0] as V }
+      if (s < 0 || outIdx[i] < 0) return { R: I3, t: [0, 0, 0] as V }
+      if (merge) { const R = frameR(s, I3); return { R, t: sub(tW[outIdx[i]].p, app(R, sW[s].p)) } }
       const side = /_L_/.test(P.skel[s].name) ? "L" : "R", R = rotOf(s), A = mul(R, armScale(side, P.skel[s].name))
       return { R, A, t: sub(tW[outIdx[i]].p, app(A, sW[s].p)) }
     })
@@ -200,8 +212,8 @@ for (const f of inputs) {
         const m = Mt[si], q = add(app(m.A ?? m.R, v.p), m.t), n = app(m.R, v.n)
         pos = add(pos, [q[0] * w, q[1] * w, q[2] * w]); nrm = add(nrm, [n[0] * w, n[1] * w, n[2] * w])
       }
-      // arms mode: a vertex with no bone in the target (the other arm of a one-handed rig) drops its triangle
-      if (tw === 0) { if (mode === "arms") break; acc.set(0, 1); tw = 1; pos = v.p; nrm = v.n }
+      // arms and merge modes: a vertex with no bone in the target (the other arm of a one-handed rig) drops its triangle
+      if (tw === 0) { if (mode !== "pose") break; acc.set(0, 1); tw = 1; pos = v.p; nrm = v.n }
       const len = Math.hypot(...nrm) || 1, main = [...acc].sort((a, b) => b[1] - a[1])[0][0]
       tl.push(`${main} ${pos.map((x) => fmt(x / tw)).join(" ")} ${nrm.map((x) => fmt(x / len)).join(" ")} ${fmt(v.uv[0])} ${fmt(v.uv[1])} ${acc.size} ${[...acc].map(([b, w]) => `${b} ${fmt(w / tw)}`).join(" ")}`)
     }
