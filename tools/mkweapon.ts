@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 scarf
 // SPDX-License-Identifier: AGPL-3.0-only
 // usage: mkweapon.ts <weapon> ; builds a patched QC dir bmsp/w/<weapon>/build with nike arms replacing the arms bodygroup
+import { filterArms } from "./armsfilter.ts"
 const T = new URL(".", import.meta.url).pathname, w = Deno.args[0], base = `bmsp/w/${w}/dec`, out = `bmsp/w/${w}/build`
 await Deno.mkdir(out, { recursive: true })
 const qcName = [...Deno.readDirSync(base)].find((e) => e.name.endsWith(".qc"))!.name
@@ -8,13 +9,7 @@ let q = Deno.readTextFileSync(`${base}/${qcName}`)
 const rig = [...Deno.readDirSync(base)].map((e) => e.name).find((n) => /(hev_standardrig(_[lr])?|^v_hands_ref)\.smd$/.test(n))!
 const r = new Deno.Command("deno", { args: ["run", "-A", `${T}retarget.ts`, "arms", `${base}/${rig}`, Deno.readTextFileSync(`${base}/${rig}`).includes("\"Bip001 ") ? "arms/map.json" : "arms/mapw.json", `${out}/nk`, "arms/na/dec/Arms.smd"] }).outputSync()
 console.log(new TextDecoder().decode(r.stdout).trim())
-await Deno.copyFile(`${out}/nk/Arms.smd`, `${out}/nike_arms_w.smd`)
-const L = Deno.readTextFileSync(`${out}/nike_arms_w.smd`).split(/\r?\n/), t = L.indexOf("triangles"), keep = L.slice(0, t + 1); let i = t + 1
-// the arm skin under the sleeve (body1 with no hand or finger bone) pokes through the sleeve where the rig bends the elbow; it is never seen
-const hand = new Set(L.slice(L.indexOf("nodes") + 1, L.indexOf("end")).flatMap((l) => { const m = l.match(/^\s*(\d+)\s+"([^"]*)"/); return m && /([ _]Hand|_Wrist|Finger\d*|Thumb\d|Index\d|Middle\d|Ring\d|Pinky\d)$/.test(m[2]) ? [+m[1]] : [] }))
-const onHand = (v: string) => { const s = v.trim().split(/\s+/).map(Number); return s.slice(10, 10 + 2 * (s[9] ?? 0)).some((b, j) => j % 2 === 0 && hand.has(b)) }
-for (; L[i] !== "end" && i < L.length; i += 4) if (L[i].trim() !== "OH_Outline_Material" && (L[i].trim() !== "body1" || L.slice(i + 1, i + 4).some(onHand))) keep.push(...L.slice(i, i + 4))
-keep.push("end"); Deno.writeTextFileSync(`${out}/nike_arms_w.smd`, keep.join("\n") + "\n")
+Deno.writeTextFileSync(`${out}/nike_arms_w.smd`, filterArms(Deno.readTextFileSync(`${out}/nk/Arms.smd`)))
 // replace studio lines inside the arms bodygroup
 q = q.replace(/(\$bodygroup "arms"\s*\{)([\s\S]*?)(\n\})/, (_m, a, body, c) => a + body.replace(/studio\s+"[^"]*"/g, 'studio "nike_arms_w.smd"') + c)
 q = q.replace(/(\$texturegroup "skinfamilies"\s*\{\s*\{)([^}]*)(\})/, (_m, a, row) => {
