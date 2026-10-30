@@ -8,6 +8,7 @@ const qcName = [...Deno.readDirSync(base)].find((e) => e.name.endsWith(".qc"))!.
 let q = Deno.readTextFileSync(`${base}/${qcName}`)
 const rig = [...Deno.readDirSync(base)].map((e) => e.name).find((n) => /(hev_standardrig(_[lr])?|^v_hands_ref)\.smd$/.test(n))!
 const r = new Deno.Command("deno", { args: ["run", "-A", `${T}retarget.ts`, "arms", `${base}/${rig}`, Deno.readTextFileSync(`${base}/${rig}`).includes("\"Bip001 ") ? "arms/map.json" : "arms/mapw.json", `${out}/nk`, "arms/na/dec/Arms.smd"] }).outputSync()
+if (!r.success) throw new Error(new TextDecoder().decode(r.stderr))
 console.log(new TextDecoder().decode(r.stdout).trim())
 Deno.writeTextFileSync(`${out}/nike_arms_w.smd`, filterArms(Deno.readTextFileSync(`${out}/nk/Arms.smd`)))
 // replace studio lines inside the arms bodygroup
@@ -27,6 +28,6 @@ for (const e of Deno.readDirSync(base)) {
   const src = Deno.realPathSync(`${base}/${e.name}`), dst = `${out}/${e.name}`
   if (!Deno.statSync(src).isDirectory) { try { Deno.symlinkSync(src, dst) } catch { /* exists */ } continue }
   await Deno.mkdir(dst, { recursive: true })
-  for (const a of Deno.readDirSync(src)) if (a.name.endsWith(".smd")) new Deno.Command("deno", { args: ["run", "-A", `${T}twistbake.ts`, `${base}/${rig}`, `${src}/${a.name}`, `${dst}/${a.name}`] }).outputSync().success || console.log("twistbake failed", a.name)
+  for (const a of Deno.readDirSync(src)) if (a.name.endsWith(".smd")) new Deno.Command("deno", { args: ["run", "-A", `${T}twistbake.ts`, `${base}/${rig}`, `${src}/${a.name}`, `${dst}/${a.name}`] }).outputSync().success || (() => { throw new Error(`twistbake failed on ${a.name}`) })()
 }
 Deno.writeTextFileSync(`${out}/patched.qc`, q)

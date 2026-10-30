@@ -17,7 +17,9 @@ for (const w of Deno.args) {
       // no pipes: wine services started by this call inherit them and keep them open after Crowbar exits
       await new Deno.Command("timeout", { args: ["300", "xvfb-run", "-a", "wine", Deno.env.get("CROWBAR")!, "-p", `Z:${d}/${w}.mdl`, "-o", `Z:${d}/dec`], stdout: "null", stderr: "null", env: { WINEDEBUG: "-all" } }).output()
     }
-    console.log(w, "mkweapon:", text(await run("deno", ["run", "-A", `${T}${hl2 ? "hl2weapon" : "mkweapon"}.ts`, w])).trim().split("\n").slice(-2).join(" | "))
+    const m = await run("deno", ["run", "-A", `${T}${hl2 ? "hl2weapon" : "mkweapon"}.ts`, w])
+    if (!m.success) throw new Error(text(m).slice(-300))
+    console.log(w, "mkweapon:", text(m).trim().split("\n").slice(-2).join(" | "))
     await Deno.mkdir(`${d}/out`, { recursive: true })
     const c = await run("deno", ["run", "-A", `${T}compile.ts`, `${d}/build`, "patched.qc", `${d}/out`, "weapons"])
     // studiomdl names vtx files after the QC's $modelname case (v_HGun); install under the lowercase name
