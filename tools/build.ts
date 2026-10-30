@@ -30,7 +30,9 @@ const wineEnv = { WINEPREFIX: cfg.prefix, WINEDEBUG: "-all" }
 // Crowbar decompiles <dir>/<name>.mdl (with vvd/vtx/phy beside it) into <dir>/dec
 export const decompile = async (mdl: string, out: string) => {
   await Deno.mkdir(out, { recursive: true })
-  await sh("timeout", ["400", "xvfb-run", "-a", "wine", cfg.crowbar, "-p", `Z:${mdl}`, "-o", `Z:${out}`], { env: wineEnv })
+  // no pipes: wine services started by this call inherit them and keep them open after Crowbar exits
+  const r = await new Deno.Command("timeout", { args: ["400", "xvfb-run", "-a", "wine", cfg.crowbar, "-p", `Z:${mdl}`, "-o", `Z:${out}`], env: wineEnv, stdout: "null", stderr: "null" }).output()
+  if (!r.success) throw new Error(`Crowbar failed on ${mdl}`)
 }
 const copyTree = async (src: string, dst: string) => { await Deno.mkdir(dst, { recursive: true }); await sh("cp", ["-a", `${src}/.`, dst]) }
 const W = (p: string) => `${cfg.work}/${p}`

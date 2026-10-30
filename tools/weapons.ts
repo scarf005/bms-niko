@@ -13,7 +13,8 @@ for (const w of Deno.args) {
     const d = `${S}/bmsp/w/${w}`
     if (!(await Deno.stat(`${d}/dec`).catch(() => null))) {
       await run("deno", ["run", "-A", `${T}vpkx.ts`, `${B}/bms_models_dir.vpk`, `^models/weapons/${w}\\.(mdl|vvd|dx90\\.vtx|ani|phy)$`, d])
-      await run("timeout", ["300", "xvfb-run", "-a", "wine", Deno.env.get("CROWBAR")!, "-p", `Z:${d}/${w}.mdl`, "-o", `Z:${d}/dec`])
+      // no pipes: wine services started by this call inherit them and keep them open after Crowbar exits
+      await new Deno.Command("timeout", { args: ["300", "xvfb-run", "-a", "wine", Deno.env.get("CROWBAR")!, "-p", `Z:${d}/${w}.mdl`, "-o", `Z:${d}/dec`], stdout: "null", stderr: "null", env: { WINEDEBUG: "-all" } }).output()
     }
     console.log(w, "mkweapon:", text(await run("deno", ["run", "-A", `${T}mkweapon.ts`, w])).trim().split("\n").slice(-2).join(" | "))
     await Deno.mkdir(`${d}/out`, { recursive: true })
